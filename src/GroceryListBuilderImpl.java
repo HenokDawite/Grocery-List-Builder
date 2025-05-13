@@ -2,17 +2,21 @@ package src;
 import java.util.*;
 
 /**
- * Implementation of the GroceryListBuilder interface
- * This class provides functionality for building and managing grocery lists.
+ * Enhanced implementation of the GroceryListBuilder interface
+ * This implementation improves the suggested list feature to consider purchase patterns,
+ * not just frequency.
  * 
  * @author Henok Dawite & Arjun Sisodia
  */
 public class GroceryListBuilderImpl implements GroceryListBuilder {
     private Map<String, Integer> itemFrequency; // Tracks item frequency
     private Map<Integer, List<String>> weeklyItems; // Maps weeks to items
+    private Map<String, Integer> lastPurchaseWeek; // Tracks the week an item was last purchased
+    private Map<String, List<Integer>> purchaseWeeks; // Tracks all weeks an item was purchased
     private PriorityQueue<ItemFrequency> frequentItemsQueue; // Queue for suggesting items
     private Map<String, String> itemCategories; // Maps items to their categories
     private Set<String> timeSensitiveItems; // Set of items that are time-sensitive
+    private int currentWeek; // The current week
     
     /**
      * Constructor to initialize the GroceryListBuilder
@@ -20,9 +24,12 @@ public class GroceryListBuilderImpl implements GroceryListBuilder {
     public GroceryListBuilderImpl() {
         itemFrequency = new HashMap<>();
         weeklyItems = new HashMap<>();
+        lastPurchaseWeek = new HashMap<>();
+        purchaseWeeks = new HashMap<>();
         frequentItemsQueue = new PriorityQueue<>((a, b) -> b.frequency - a.frequency); // Higher frequency first
         itemCategories = new HashMap<>();
         timeSensitiveItems = new HashSet<>();
+        currentWeek = 1;
     }
 
     /**
@@ -40,11 +47,26 @@ public class GroceryListBuilderImpl implements GroceryListBuilder {
 
     @Override
     public void addItem(String item, int week) {
+        // Update frequency
         itemFrequency.put(item, itemFrequency.getOrDefault(item, 0) + 1);
 
+        // Update weekly items
         weeklyItems.putIfAbsent(week, new ArrayList<>());
         weeklyItems.get(week).add(item);
+        
+        // Update last purchase week
+        lastPurchaseWeek.put(item, week);
+        
+        // Update purchase weeks history
+        purchaseWeeks.putIfAbsent(item, new ArrayList<>());
+        purchaseWeeks.get(item).add(week);
+        
+        // Update current week if this week is newer
+        if (week > currentWeek) {
+            currentWeek = week;
+        }
 
+        // Update priority queue
         updateFrequentItemsQueue();
     }
 
@@ -69,7 +91,9 @@ public class GroceryListBuilderImpl implements GroceryListBuilder {
         // Get top 10 items or all items if less than 10
         int count = Math.min(10, tempQueue.size());
         for (int i = 0; i < count; i++) {
-            frequentItems.add(tempQueue.poll().item);
+            if (!tempQueue.isEmpty()) {
+                frequentItems.add(tempQueue.poll().item);
+            }
         }
         
         return frequentItems;
@@ -78,13 +102,46 @@ public class GroceryListBuilderImpl implements GroceryListBuilder {
     @Override
     public List<String> generateSuggestedList() {
         List<String> suggestedList = new ArrayList<>();
-        PriorityQueue<ItemFrequency> tempQueue = new PriorityQueue<>(frequentItemsQueue);
         
-        // Get items purchased more than once
-        while (!tempQueue.isEmpty()) {
-            ItemFrequency itemFreq = tempQueue.poll();
-            if (itemFreq.frequency > 1) {
-                suggestedList.add(itemFreq.item);
+        // Consider purchase patterns, not just frequency
+        for (Map.Entry<String, List<Integer>> entry : purchaseWeeks.entrySet()) {
+            String item = entry.getKey();
+            List<Integer> weeks = entry.getValue();
+            
+            if (weeks.size() <= 1) {
+                // Skip items purchased only once
+                continue;
+            }
+            
+            // Calculate the average purchase interval
+            int totalInterval = 0;
+            for (int i = 1; i < weeks.size(); i++) {
+                totalInterval += weeks.get(i) - weeks.get(i-1);
+            }
+            double avgInterval = (double) totalInterval / (weeks.size() - 1);
+            
+            // Get the last purchase week
+            int lastWeek = lastPurchaseWeek.getOrDefault(item, 0);
+            
+            // Determine if it's time to suggest the item again
+            int weeksSinceLastPurchase = currentWeek - lastWeek;
+            
+            // If time since last purchase is close to the average interval,
+            // or if it's a time-sensitive item that might expire soon
+            if (weeksSinceLastPurchase >= avgInterval - 0.5 ||
+                (timeSensitiveItems.contains(item) && weeksSinceLastPurchase >= 2)) {
+                suggestedList.add(item);
+            }
+        }
+        
+        // If suggested list is too small, add frequent items
+        if (suggestedList.size() < 5) {
+            PriorityQueue<ItemFrequency> tempQueue = new PriorityQueue<>(frequentItemsQueue);
+            while (suggestedList.size() < 5 && !tempQueue.isEmpty()) {
+                String item = tempQueue.poll().item;
+                if (!suggestedList.contains(item)) {
+                    suggestedList.add(item);
+                }
             }
         }
         
@@ -92,15 +149,23 @@ public class GroceryListBuilderImpl implements GroceryListBuilder {
     }
 
     @Override
-    public void rotateItems(int currentWeek) {
-        // Remove items from time-sensitive items that are likely to be expired
-        // and add them to the suggested list for the coming week
-        if (weeklyItems.containsKey(currentWeek - 2)) {
-            List<String> oldItems = weeklyItems.get(currentWeek - 2);
+    public void rotateItems(int week) {
+        // Update current week
+        if (week > currentWeek) {
+            currentWeek = week;
+        }
+        
+        // Look for time-sensitive items from 2 weeks ago
+        if (weeklyItems.containsKey(week - 2)) {
+            List<String> oldItems = weeklyItems.get(week - 2);
             for (String item : oldItems) {
                 if (timeSensitiveItems.contains(item)) {
-                    // Add to current week if it's time to repurchase
-                    addItem(item, currentWeek);
+                    // Check if not purchased recently
+                    Integer lastWeek = lastPurchaseWeek.get(item);
+                    if (lastWeek != null && lastWeek <= week - 2) {
+                        // Add to current week if it's time to repurchase
+                        addItem(item, week);
+                    }
                 }
             }
         }
@@ -114,6 +179,11 @@ public class GroceryListBuilderImpl implements GroceryListBuilder {
      */
     public void addCategory(String item, String category) {
         itemCategories.put(item, category);
+        
+        // Automatically mark certain categories as time-sensitive
+        if (category.equals("Fruits") || category.equals("Vegetables") || category.equals("Dairy")) {
+            markAsTimeSensitive(item);
+        }
     }
     
     /**
@@ -204,5 +274,44 @@ public class GroceryListBuilderImpl implements GroceryListBuilder {
      */
     public Set<Integer> getAllWeeks() {
         return weeklyItems.keySet();
+    }
+    
+    /**
+     * Gets the current week
+     * 
+     * @return The current week number
+     */
+    public int getCurrentWeek() {
+        return currentWeek;
+    }
+    
+    /**
+     * Sets the current week
+     * 
+     * @param week The week number to set
+     */
+    public void setCurrentWeek(int week) {
+        currentWeek = week;
+    }
+    
+    /**
+     * Calculates the average purchase interval for an item
+     * 
+     * @param item The item to calculate for
+     * @return The average interval between purchases, or -1 if insufficient data
+     */
+    public double getAveragePurchaseInterval(String item) {
+        List<Integer> weeks = purchaseWeeks.get(item);
+        
+        if (weeks == null || weeks.size() <= 1) {
+            return -1;
+        }
+        
+        int totalInterval = 0;
+        for (int i = 1; i < weeks.size(); i++) {
+            totalInterval += weeks.get(i) - weeks.get(i-1);
+        }
+        
+        return (double) totalInterval / (weeks.size() - 1);
     }
 }
