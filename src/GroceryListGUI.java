@@ -31,7 +31,7 @@ public class GroceryListGUI {
 
         JButton addButton = new JButton("Add Item");
         JButton viewFrequentButton = new JButton("View Frequent Items");
-        JButton suggestButton = new JButton("Generate Suggested List");
+        JButton suggestButton = new JButton("Generate Smart Suggestions");
         JButton rotateButton = new JButton("Rotate Time-Sensitive Items");
         JButton filterButton = new JButton("Filter by Category");
         JButton loadButton = new JButton("Load CSV");
@@ -69,7 +69,7 @@ public class GroceryListGUI {
 
         viewFrequentButton.addActionListener(e -> {
             java.util.List<String> items = builder.getFrequentItems();
-            displayArea.setText("Frequent Items:\n" + String.join("\n", items));
+            displayArea.setText("Frequent Items (by count only):\n" + String.join("\n", items));
         });
 
         suggestButton.addActionListener(e -> {
@@ -87,7 +87,7 @@ public class GroceryListGUI {
             Set<String> seen = new HashSet<>();
             int count = 0;
             for (String item : allSuggestions) {
-                if (count >= 10 || seen.contains(item)) continue;
+                if (seen.contains(item)) continue;
                 seen.add(item);
 
                 double interval = builder.getAveragePurchaseInterval(item);
@@ -95,24 +95,42 @@ public class GroceryListGUI {
                 int lastWeek = builder.getLastPurchaseWeek(item);
                 boolean timeSensitive = builder.isTimeSensitive(item);
 
-                if (interval < 0 && !timeSensitive) continue; // skip junk
+                int weeksSinceLast = currentWeek - lastWeek;
+                if (interval > 0 && weeksSinceLast < interval - 0.5) continue;
 
                 explained.add(String.format("%s - %s (last bought: Week %d, interval: %s)",
                         item,
-                        timeSensitive ? "Time-sensitive" : "Based on interval",
+                        timeSensitive ? "Time-sensitive" : "Smart based on history",
                         lastWeek,
                         intervalStr));
                 count++;
+                if (count >= 10) break;
             }
 
-            displayArea.setText("Suggested List (Top 10):\n" + String.join("\n", explained));
+            if (explained.isEmpty()) {
+                displayArea.setText("No items are due this week based on smart interval logic.");
+            } else {
+                displayArea.setText("Suggested List (Smart, Top 10):\n" + String.join("\n", explained));
+            }
         });
 
         rotateButton.addActionListener(e -> {
             try {
                 int currentWeek = Integer.parseInt(weekField.getText());
-                builder.rotateItems(currentWeek);
-                displayArea.setText("Time-sensitive items rotated for week: " + currentWeek);
+                java.util.List<String> rotated = new ArrayList<>();
+                for (String category : new String[]{"Fruits", "Vegetables", "Dairy"}) {
+                    for (String item : builder.getItemsByCategory(category)) {
+                        if (builder.getLastPurchaseWeek(item) <= currentWeek - 2) {
+                            builder.addItem(item, currentWeek);
+                            rotated.add(item);
+                        }
+                    }
+                }
+                if (rotated.isEmpty()) {
+                    displayArea.setText("No time-sensitive items needed rotation for week: " + currentWeek);
+                } else {
+                    displayArea.setText("Rotated items for week " + currentWeek + ":\n" + String.join("\n", rotated));
+                }
             } catch (NumberFormatException ex) {
                 displayArea.setText("Please enter a valid week number.");
             }
