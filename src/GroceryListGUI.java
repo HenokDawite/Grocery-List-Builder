@@ -55,13 +55,22 @@ public class GroceryListGUI {
         frame.add(scrollPane, BorderLayout.CENTER);
 
         addButton.addActionListener(e -> {
-            String item = itemField.getText();
+            String item = itemField.getText().trim();
             String category = (String) categoryDropdown.getSelectedItem();
             try {
+                if (item.isEmpty()) {
+                    displayArea.setText("Please enter an item name.");
+                    return;
+                }
                 int week = Integer.parseInt(weekField.getText());
+                if (week < 1) {
+                    displayArea.setText("Week number must be positive.");
+                    return;
+                }
                 builder.addItem(item, week);
                 builder.addCategory(item, category);
                 displayArea.setText("Item added: " + item);
+                itemField.setText(""); // Clear the field after successful addition
             } catch (NumberFormatException ex) {
                 displayArea.setText("Please enter a valid week number.");
             }
@@ -148,10 +157,14 @@ public class GroceryListGUI {
             if (returnVal == JFileChooser.APPROVE_OPTION) {
                 File file = fileChooser.getSelectedFile();
                 int count = 0;
+                int errorCount = 0;
+                StringBuilder errorDetails = new StringBuilder();
                 try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
                     String line;
                     boolean isHeader = true;
+                    int lineNumber = 0;
                     while ((line = reader.readLine()) != null) {
+                        lineNumber++;
                         if (isHeader) {
                             isHeader = false;
                             continue;
@@ -159,16 +172,45 @@ public class GroceryListGUI {
                         String[] parts = line.split(",");
                         if (parts.length >= 3) {
                             String item = parts[0].trim();
-                            int week = Integer.parseInt(parts[1].trim());
+                            String weekStr = parts[1].trim();
                             String category = parts[2].trim();
-                            builder.addItem(item, week);
-                            builder.addCategory(item, category);
-                            count++;
+                            
+                            if (item.isEmpty()) {
+                                errorCount++;
+                                errorDetails.append("Line ").append(lineNumber).append(": Empty item name\n");
+                                continue;
+                            }
+                            
+                            try {
+                                int week = Integer.parseInt(weekStr);
+                                if (week < 1) {
+                                    errorCount++;
+                                    errorDetails.append("Line ").append(lineNumber).append(": Invalid week number (").append(weekStr).append(")\n");
+                                    continue;
+                                }
+                                builder.addItem(item, week);
+                                builder.addCategory(item, category);
+                                count++;
+                            } catch (NumberFormatException ex) {
+                                errorCount++;
+                                errorDetails.append("Line ").append(lineNumber).append(": Invalid week number format (").append(weekStr).append(")\n");
+                            }
+                        } else {
+                            errorCount++;
+                            errorDetails.append("Line ").append(lineNumber).append(": Invalid format (expected 3 columns)\n");
                         }
                     }
-                    displayArea.setText("Loaded " + count + " items from CSV.");
+                    String message = "Loaded " + count + " items from CSV.";
+                    if (errorCount > 0) {
+                        message += "\nSkipped " + errorCount + " invalid entries:\n" + errorDetails.toString();
+                    }
+                    displayArea.setText(message);
+                } catch (FileNotFoundException ex) {
+                    displayArea.setText("Error: File not found - " + ex.getMessage());
+                } catch (IOException ex) {
+                    displayArea.setText("Error reading file: " + ex.getMessage());
                 } catch (Exception ex) {
-                    displayArea.setText("Error loading CSV: " + ex.getMessage());
+                    displayArea.setText("Unexpected error: " + ex.getMessage());
                 }
             }
         });
