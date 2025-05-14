@@ -314,4 +314,8 @@ public class GroceryListBuilderImpl implements GroceryListBuilder {
         
         return (double) totalInterval / (weeks.size() - 1);
     }
+
+    public int getLastPurchaseWeek(String item) {
+        return lastPurchaseWeek.getOrDefault(item, -1);
+    }    
 }
