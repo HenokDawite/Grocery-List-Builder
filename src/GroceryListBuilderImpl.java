@@ -184,7 +184,12 @@ public class GroceryListBuilderImpl implements GroceryListBuilder {
         itemCategories.put(item, category);
         
         // Automatically mark certain categories as time-sensitive
-        if (category.equals("Fruits") || category.equals("Vegetables") || category.equals("Dairy")) {
+        if (category.equals("Fruits") || 
+            category.equals("Vegetables") || 
+            category.equals("Dairy") ||
+            category.equals("Bakery") ||
+            category.equals("Deli") ||
+            category.equals("Seafood")) {
             markAsTimeSensitive(item);
         }
     }

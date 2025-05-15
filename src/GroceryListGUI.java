@@ -25,7 +25,21 @@ public class GroceryListGUI {
 
         itemField = new JTextField();
         weekField = new JTextField();
-        categoryDropdown = new JComboBox<>(new String[]{"Fruits", "Vegetables", "Dairy", "Snacks", "Meat", "Beverages", "Grains", "Other"});
+        categoryDropdown = new JComboBox<>(new String[]{
+            "Fruits", 
+            "Vegetables", 
+            "Dairy", 
+            "Snacks", 
+            "Meat", 
+            "Beverages", 
+            "Grains", 
+            "Frozen Foods",
+            "Canned Goods",
+            "Bakery",
+            "Deli",
+            "Seafood",
+            "Condiments"
+        });
         displayArea = new JTextArea();
         displayArea.setEditable(false);
 
