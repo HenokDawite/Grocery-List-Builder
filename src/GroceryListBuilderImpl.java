@@ -108,10 +108,13 @@ public class GroceryListBuilderImpl implements GroceryListBuilder {
             String item = entry.getKey();
             List<Integer> weeks = entry.getValue();
             
-            if (weeks.size() <= 1) {
-                // Skip items purchased only once
+            // Skip items purchased less than twice
+            if (weeks.size() < 2) {
                 continue;
             }
+            
+            // Sort weeks to ensure correct interval calculation
+            Collections.sort(weeks);
             
             // Calculate the average purchase interval
             int totalInterval = 0;
@@ -134,12 +137,12 @@ public class GroceryListBuilderImpl implements GroceryListBuilder {
             }
         }
         
-        // If suggested list is too small, add frequent items
+        // If suggested list is too small, add frequent items that have been purchased at least twice
         if (suggestedList.size() < 5) {
             PriorityQueue<ItemFrequency> tempQueue = new PriorityQueue<>(frequentItemsQueue);
             while (suggestedList.size() < 5 && !tempQueue.isEmpty()) {
                 String item = tempQueue.poll().item;
-                if (!suggestedList.contains(item)) {
+                if (!suggestedList.contains(item) && purchaseWeeks.get(item).size() >= 2) {
                     suggestedList.add(item);
                 }
             }
@@ -302,16 +305,17 @@ public class GroceryListBuilderImpl implements GroceryListBuilder {
      */
     public double getAveragePurchaseInterval(String item) {
         List<Integer> weeks = purchaseWeeks.get(item);
-        
         if (weeks == null || weeks.size() <= 1) {
-            return -1;
+            return -1.0; // Return -1 to indicate no interval data
         }
+        
+        // Sort weeks to ensure correct interval calculation
+        Collections.sort(weeks);
         
         int totalInterval = 0;
         for (int i = 1; i < weeks.size(); i++) {
             totalInterval += weeks.get(i) - weeks.get(i-1);
         }
-        
         return (double) totalInterval / (weeks.size() - 1);
     }
 
