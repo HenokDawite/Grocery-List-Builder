@@ -2,43 +2,83 @@ package src;
 import java.util.*;
 
 /**
- * Enhanced implementation of the GroceryListBuilder interface
- * This implementation improves the suggested list feature to consider purchase patterns,
- * not just frequency.
- * 
+ * Implementation of the GroceryListBuilder interface 
+ * This class uses purchase history to create intelligent shopping suggestions
+ * based on purchase patterns, frequency, and item characteristics.
  * @author Henok Dawite & Arjun Sisodia
  */
 public class GroceryListBuilderImpl implements GroceryListBuilder {
-    private Map<String, Integer> itemFrequency; // Tracks item frequency
-    private Map<Integer, List<String>> weeklyItems; // Maps weeks to items
-    private Map<String, Integer> lastPurchaseWeek; // Tracks the week an item was last purchased
-    private Map<String, List<Integer>> purchaseWeeks; // Tracks all weeks an item was purchased
-    private PriorityQueue<ItemFrequency> frequentItemsQueue; // Queue for suggesting items
-    private Map<String, String> itemCategories; // Maps items to their categories
-    private Set<String> timeSensitiveItems; // Set of items that are time-sensitive
-    private int currentWeek; // The current week
+    // Tracks how many times each item has been purchased overall
+    private Map<String, Integer> itemFrequency; 
+    
+    // Records which items were bought in each specific week
+    private Map<Integer, List<String>> weeklyItems; 
+    
+    // Stores the most recent week when each item was purchased
+    private Map<String, Integer> lastPurchaseWeek; 
+    
+    // Maintains complete purchase history by week for each item
+    private Map<String, List<Integer>> purchaseWeeks; 
+    
+    // Priority queue for efficiently retrieving most frequent items
+    private PriorityQueue<ItemFrequency> frequentItemsQueue; 
+    
+    // Organizes items by category (produce, dairy, etc.)
+    private Map<String, String> itemCategories; 
+    
+    // Tracks items that may spoil or expire quickly
+    private Set<String> timeSensitiveItems; 
+    
+    // Tracks the current week number for calculations
+    private int currentWeek; 
     
     /**
-     * Constructor to initialize the GroceryListBuilder
+     * Initializes the grocery list builder with empty data structures
+     * to track purchase history and item information.
      */
     public GroceryListBuilderImpl() {
+        // Initialize HashMap to track purchase frequency of items
         itemFrequency = new HashMap<>();
+        
+        // Initialize HashMap to track items purchased in each week
         weeklyItems = new HashMap<>();
+        
+        // Initialize HashMap to track when each item was last purchased
         lastPurchaseWeek = new HashMap<>();
+        
+        // Initialize HashMap to track all purchase dates for each item
         purchaseWeeks = new HashMap<>();
-        frequentItemsQueue = new PriorityQueue<>((a, b) -> b.frequency - a.frequency); // Higher frequency first
+        
+        // Initialize priority queue with custom comparator - higher frequency items get higher priority
+        frequentItemsQueue = new PriorityQueue<>((a, b) -> b.frequency - a.frequency);
+        
+        // Initialize HashMap to track item categories
         itemCategories = new HashMap<>();
+        
+        // Initialize HashSet to track perishable items
         timeSensitiveItems = new HashSet<>();
+        
+        // Initialize current week to 1 (beginning)
         currentWeek = 1;
     }
 
     /**
-     * Inner class to represent an item and its frequency
+     * Helper class to store items with their purchase frequencies.
+     * Used for prioritizing items in the frequency queue.
      */
     private class ItemFrequency {
+        // The name of the item
         String item;
+        
+        // How many times the item has been purchased
         int frequency;
         
+        /**
+         * Creates a new ItemFrequency instance.
+         * 
+         * @param item The name of the item
+         * @param frequency How many times this item has been purchased
+         */
         public ItemFrequency(String item, int frequency) {
             this.item = item;
             this.frequency = frequency;
@@ -47,37 +87,38 @@ public class GroceryListBuilderImpl implements GroceryListBuilder {
 
     @Override
     public void addItem(String item, int week) {
-        // Update frequency
+        // Increment the frequency counter for this item
         itemFrequency.put(item, itemFrequency.getOrDefault(item, 0) + 1);
 
-        // Update weekly items
+        // Add this item to the list of items for this week
         weeklyItems.putIfAbsent(week, new ArrayList<>());
         weeklyItems.get(week).add(item);
         
-        // Update last purchase week
+        // Update the last purchase week for this item
         lastPurchaseWeek.put(item, week);
         
-        // Update purchase weeks history
+        // Add this week to the purchase history for this item
         purchaseWeeks.putIfAbsent(item, new ArrayList<>());
         purchaseWeeks.get(item).add(week);
         
-        // Update current week if this week is newer
+        // Update the current week tracker if this purchase is in a newer week
         if (week > currentWeek) {
             currentWeek = week;
         }
 
-        // Update priority queue
+        // Refresh the priority queue with current frequency data
         updateFrequentItemsQueue();
     }
 
     /**
-     * Updates the priority queue with current frequency information
+     * Refreshes the priority queue with current frequency data.
+     * Called whenever item frequencies change to maintain accuracy.
      */
     private void updateFrequentItemsQueue() {
-        // Clear existing queue
+        // Clear all existing entries in the priority queue
         frequentItemsQueue.clear();
         
-        // Add all items with their frequencies
+        // Rebuild the queue with current frequency data for all items
         for (Map.Entry<String, Integer> entry : itemFrequency.entrySet()) {
             frequentItemsQueue.add(new ItemFrequency(entry.getKey(), entry.getValue()));
         }
@@ -85,88 +126,108 @@ public class GroceryListBuilderImpl implements GroceryListBuilder {
 
     @Override
     public List<String> getFrequentItems() {
+        // Create list to hold the results
         List<String> frequentItems = new ArrayList<>();
+        
+        // Create a temporary copy of the queue to preserve the original
         PriorityQueue<ItemFrequency> tempQueue = new PriorityQueue<>(frequentItemsQueue);
         
-        // Get top 10 items or all items if less than 10
+        // Determine how many items to retrieve (at most 10)
         int count = Math.min(10, tempQueue.size());
+        
+        // Extract the top items from the queue
         for (int i = 0; i < count; i++) {
             if (!tempQueue.isEmpty()) {
+                // Add the next most frequent item to the result list
                 frequentItems.add(tempQueue.poll().item);
             }
         }
         
+        // Return the list of most frequent items
         return frequentItems;
     }
 
     @Override
     public List<String> generateSuggestedList() {
+        // Create list to hold suggestions
         List<String> suggestedList = new ArrayList<>();
         
-        // Consider purchase patterns, not just frequency
+        // Analyze purchase patterns for each item
         for (Map.Entry<String, List<Integer>> entry : purchaseWeeks.entrySet()) {
+            // Get item name
             String item = entry.getKey();
+            // Get all weeks when this item was purchased
             List<Integer> weeks = entry.getValue();
             
-            // Skip items purchased less than twice
+            // Skip items with insufficient data for pattern detection
             if (weeks.size() < 2) {
                 continue;
             }
             
-            // Sort weeks to ensure correct interval calculation
+            // Sort the weeks chronologically for interval calculations
             Collections.sort(weeks);
             
-            // Calculate the average purchase interval
+            // Calculate the average interval between purchases
             int totalInterval = 0;
             for (int i = 1; i < weeks.size(); i++) {
                 totalInterval += weeks.get(i) - weeks.get(i-1);
             }
             double avgInterval = (double) totalInterval / (weeks.size() - 1);
             
-            // Get the last purchase week
+            // Get when this item was last purchased
             int lastWeek = lastPurchaseWeek.getOrDefault(item, 0);
             
-            // Determine if it's time to suggest the item again
+            // Calculate how long it's been since the last purchase
             int weeksSinceLastPurchase = currentWeek - lastWeek;
             
-            // If time since last purchase is close to the average interval,
-            // or if it's a time-sensitive item that might expire soon
+            // Add to suggestions if:
+            // 1. It's approaching the average purchase interval time, or
+            // 2. It's a time-sensitive item that hasn't been bought recently
             if (weeksSinceLastPurchase >= avgInterval - 0.5 ||
                 (timeSensitiveItems.contains(item) && weeksSinceLastPurchase >= 2)) {
                 suggestedList.add(item);
             }
         }
         
-        // If suggested list is too small, add frequent items that have been purchased at least twice
+        // Ensure the list has at least 5 items by adding frequent items if needed
         if (suggestedList.size() < 5) {
+            // Create a temporary copy of the frequency queue to preserve the original
             PriorityQueue<ItemFrequency> tempQueue = new PriorityQueue<>(frequentItemsQueue);
+            // Add items until we have at least 5 or run out of candidates
             while (suggestedList.size() < 5 && !tempQueue.isEmpty()) {
+                // Get the next most frequent item
                 String item = tempQueue.poll().item;
+                // Only add if not already in list and we have enough purchase data
                 if (!suggestedList.contains(item) && purchaseWeeks.get(item).size() >= 2) {
                     suggestedList.add(item);
                 }
             }
         }
         
+        // Return the final list of suggestions
         return suggestedList;
     }
 
     @Override
     public void rotateItems(int week) {
-        // Update current week
+        // Update the current week if the provided week is newer
         if (week > currentWeek) {
             currentWeek = week;
         }
         
-        // Look for time-sensitive items from 2 weeks ago
+        // Look for time-sensitive items purchased 2 weeks ago
         if (weeklyItems.containsKey(week - 2)) {
+            // Get all items purchased 2 weeks ago
             List<String> oldItems = weeklyItems.get(week - 2);
+            // Check each item for rotation eligibility
             for (String item : oldItems) {
+                // Only consider time-sensitive items
                 if (timeSensitiveItems.contains(item)) {
-                    // Check if not purchased recently
+                    // Get the last recorded purchase week for this item
                     Integer lastWeek = lastPurchaseWeek.get(item);
+                    // Only rotate if it hasn't been purchased more recently
                     if (lastWeek != null && lastWeek <= week - 2) {
-                        // Add to current week if it's time to repurchase
+                        // Add the item to the current week to simulate repurchase
                         addItem(item, week);
                     }
                 }
@@ -175,156 +236,185 @@ public class GroceryListBuilderImpl implements GroceryListBuilder {
     }
 
     /**
-     * Adds a category to an item
+     * Assigns a category to an item and automatically marks certain
+     * perishable categories as time-sensitive.
      * 
-     * @param item The grocery item
-     * @param category The category to assign
+     * @param item The grocery item name
+     * @param category The category to assign to the item
      */
     public void addCategory(String item, String category) {
+        // Store the category for this item
         itemCategories.put(item, category);
         
-        // Automatically mark certain categories as time-sensitive
+        // Automatically mark items in perishable categories as time-sensitive
         if (category.equals("Fruits") || 
             category.equals("Vegetables") || 
             category.equals("Dairy") ||
             category.equals("Bakery") ||
             category.equals("Deli") ||
             category.equals("Seafood")) {
+            // Mark the item as time-sensitive
             markAsTimeSensitive(item);
         }
     }
     
     /**
-     * Gets the category of an item
+     * Retrieves the category assigned to an item.
      * 
-     * @param item The grocery item
-     * @return The category of the item, or null if not categorized
+     * @param item The grocery item name
+     * @return The item's category or null if uncategorized
      */
     public String getItemCategory(String item) {
+        // Return the category, or null if not found
         return itemCategories.getOrDefault(item, null);
     }
 
     /**
-     * Gets all items in a specific category
+     * Retrieves all items belonging to a specific category.
      * 
      * @param category The category to filter by
-     * @return List of items in the category
+     * @return A list of all items in the requested category
      */
     public List<String> getItemsByCategory(String category) {
+        // Create list to hold matching items
         List<String> items = new ArrayList<>();
         
+        // Check each item's category for a match
         for (Map.Entry<String, String> entry : itemCategories.entrySet()) {
             if (entry.getValue().equals(category)) {
+                // Add matching items to the results list
                 items.add(entry.getKey());
             }
         }
         
+        // Return the list of items in this category
         return items;
     }
     
     /**
-     * Marks an item as time-sensitive
+     * Flags an item as time-sensitive, indicating it may spoil or expire quickly.
      * 
-     * @param item The item to mark as time-sensitive
+     * @param item The grocery item to mark as time-sensitive
      */
     public void markAsTimeSensitive(String item) {
+        // Add this item to the set of time-sensitive items
         timeSensitiveItems.add(item);
     }
 
     /**
-     * Removes an item from the time-sensitive set
+     * Removes the time-sensitive flag from an item.
      * 
-     * @param item The item to unmark as time-sensitive
+     * @param item The grocery item to unmark as time-sensitive
      */
     public void unmarkAsTimeSensitive(String item) {
+        // Remove this item from the set of time-sensitive items
         timeSensitiveItems.remove(item);
     }
 
     /**
-     * Checks if an item is time-sensitive
+     * Determines whether an item is flagged as time-sensitive.
      * 
-     * @param item The item to check
-     * @return true if the item is time-sensitive, false otherwise
+     * @param item The grocery item to check
+     * @return true if the item is marked as time-sensitive, false otherwise
      */
     public boolean isTimeSensitive(String item) {
+        // Check if the item is in the time-sensitive set
         return timeSensitiveItems.contains(item);
     }
     
     /**
-     * Gets all items purchased in a specific week
+     * Retrieves all items purchased during a specific week.
      * 
-     * @param week The week number
-     * @return List of items purchased in that week
+     * @param week The week number to retrieve items for
+     * @return A list of items purchased during that week
      */
     public List<String> getWeeklyItems(int week) {
+        // Return the list of items for this week, or an empty list if none
         return weeklyItems.getOrDefault(week, new ArrayList<>());
     }
     
     /**
-     * Gets all available categories
+     * Retrieves all unique categories currently in use.
      * 
-     * @return Set of all categories
+     * @return A set of all category names
      */
     public Set<String> getAllCategories() {
+        // Create a set to store unique categories
         Set<String> categories = new HashSet<>();
         
+        // Add each category to the set (duplicates automatically ignored)
         for (String category : itemCategories.values()) {
             categories.add(category);
         }
         
+        // Return the set of all categories
         return categories;
     }
     
     /**
-     * Gets all week numbers that have grocery data
+     * Retrieves all week numbers that contain purchase history.
      * 
-     * @return Set of week numbers
+     * @return A set of all week numbers with recorded purchases
      */
     public Set<Integer> getAllWeeks() {
+        // Return the set of all weeks that have purchase records
         return weeklyItems.keySet();
     }
     
     /**
-     * Gets the current week
+     * Gets the current week number being tracked.
      * 
      * @return The current week number
      */
     public int getCurrentWeek() {
+        // Return the current week tracker value
         return currentWeek;
     }
     
     /**
-     * Sets the current week
+     * Updates the current week number being tracked.
      * 
-     * @param week The week number to set
+     * @param week The new week number to set
      */
     public void setCurrentWeek(int week) {
+        // Update the current week tracker
         currentWeek = week;
     }
     
     /**
-     * Calculates the average purchase interval for an item
+     * Calculates how often an item is typically purchased.
      * 
-     * @param item The item to calculate for
-     * @return The average interval between purchases, or -1 if insufficient data
+     * @param item The grocery item to analyze
+     * @return The average number of weeks between purchases, or -1 if insufficient data
      */
     public double getAveragePurchaseInterval(String item) {
+        // Get the purchase history for this item
         List<Integer> weeks = purchaseWeeks.get(item);
+        // Check if we have enough data to calculate an interval
         if (weeks == null || weeks.size() <= 1) {
             return -1.0; // Return -1 to indicate no interval data
         }
         
-        // Sort weeks to ensure correct interval calculation
+        // Sort the weeks chronologically
         Collections.sort(weeks);
         
+        // Calculate the total of all intervals
         int totalInterval = 0;
         for (int i = 1; i < weeks.size(); i++) {
             totalInterval += weeks.get(i) - weeks.get(i-1);
         }
+        // Calculate and return the average interval
         return (double) totalInterval / (weeks.size() - 1);
     }
 
+    /**
+     * Retrieves the most recent week when an item was purchased.
+     * 
+     * @param item The grocery item to check
+     * @return The week number of the most recent purchase, or -1 if never purchased
+     */
     public int getLastPurchaseWeek(String item) {
+        // Return the last purchase week, or -1 if not found
         return lastPurchaseWeek.getOrDefault(item, -1);
     }    
 }
