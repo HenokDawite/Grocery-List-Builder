@@ -21,11 +21,25 @@ public class GroceryListGUI {
         frame.setSize(700, 550);
 
         JPanel panel = new JPanel();
-        panel.setLayout(new GridLayout(6, 2));
+        panel.setLayout(new GridLayout(7, 2, 5, 5));  // Added gaps between components
 
         itemField = new JTextField();
         weekField = new JTextField();
-        categoryDropdown = new JComboBox<>(new String[]{"Fruits", "Vegetables", "Dairy", "Snacks", "Meat", "Beverages", "Grains", "Other"});
+        categoryDropdown = new JComboBox<>(new String[]{
+            "Fruits", 
+            "Vegetables", 
+            "Dairy", 
+            "Snacks", 
+            "Meat", 
+            "Beverages", 
+            "Grains", 
+            "Frozen Foods",
+            "Canned Goods",
+            "Bakery",
+            "Deli",
+            "Seafood",
+            "Condiments"
+        });
         displayArea = new JTextArea();
         displayArea.setEditable(false);
 
@@ -35,6 +49,7 @@ public class GroceryListGUI {
         JButton rotateButton = new JButton("Rotate Time-Sensitive Items");
         JButton filterButton = new JButton("Filter by Category");
         JButton loadButton = new JButton("Load CSV");
+        JButton markTimeSensitiveButton = new JButton("Mark as Time-Sensitive");
 
         panel.add(new JLabel("Item Name:"));
         panel.add(itemField);
@@ -48,6 +63,8 @@ public class GroceryListGUI {
         panel.add(rotateButton);
         panel.add(filterButton);
         panel.add(loadButton);
+        panel.add(markTimeSensitiveButton);
+        panel.add(new JLabel("")); // Empty label for spacing
 
         JScrollPane scrollPane = new JScrollPane(displayArea);
 
@@ -100,18 +117,32 @@ public class GroceryListGUI {
                 seen.add(item);
 
                 double interval = builder.getAveragePurchaseInterval(item);
-                String intervalStr = interval < 0 ? "n/a" : String.format("%.1f", interval);
+                String intervalStr;
+                if (interval < 0) {
+                    intervalStr = "n/a (new item)";
+                } else {
+                    intervalStr = String.format("%.1f weeks", interval);
+                }
+                
                 int lastWeek = builder.getLastPurchaseWeek(item);
                 boolean timeSensitive = builder.isTimeSensitive(item);
 
                 int weeksSinceLast = currentWeek - lastWeek;
                 if (interval > 0 && weeksSinceLast < interval - 0.5) continue;
 
-                explained.add(String.format("%s - %s (last bought: Week %d, interval: %s)",
+                String reason;
+                if (timeSensitive) {
+                    reason = "Time-sensitive item";
+                } else if (interval < 0) {
+                    reason = "New item";
+                } else {
+                    reason = String.format("Due based on %s average interval", intervalStr);
+                }
+
+                explained.add(String.format("%s - %s (last bought: Week %d)",
                         item,
-                        timeSensitive ? "Time-sensitive" : "Smart based on history",
-                        lastWeek,
-                        intervalStr));
+                        reason,
+                        lastWeek));
                 count++;
                 if (count >= 10) break;
             }
@@ -213,6 +244,23 @@ public class GroceryListGUI {
                     displayArea.setText("Unexpected error: " + ex.getMessage());
                 }
             }
+        });
+
+        markTimeSensitiveButton.addActionListener(e -> {
+            String item = itemField.getText().trim();
+            if (item.isEmpty()) {
+                displayArea.setText("Please enter an item name to mark as time-sensitive.");
+                return;
+            }
+            
+            // Check if item exists in the system
+            if (builder.getItemCategory(item) == null) {
+                displayArea.setText("Item '" + item + "' not found. Please add the item first.");
+                return;
+            }
+            
+            builder.markAsTimeSensitive(item);
+            displayArea.setText("Item '" + item + "' marked as time-sensitive.");
         });
 
         frame.setVisible(true);
